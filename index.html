@@ -182,8 +182,10 @@ async function loadDashboard() {
 
   try {
 
-    const summaryResponse =
-      await fetch(API_URL + "/api/summary");
+    const summaryResponse = await fetch(
+  API_URL + "/api/summary?t=" + Date.now(),
+  { cache: "no-store" }
+);
 
     const summary =
       await summaryResponse.json();
@@ -202,22 +204,28 @@ async function loadDashboard() {
       "$ " + Number(summary.net_revenue).toLocaleString();
 
 
-    const dailyResponse =
-      await fetch(API_URL + "/api/daily");
+    const dailyResponse = await fetch(
+  API_URL + "/api/daily?t=" + Date.now(),
+  { cache: "no-store" }
+);
 
     const dailyData =
       await dailyResponse.json();
 
 
-    const productResponse =
-      await fetch(API_URL + "/api/products");
+    const productResponse = await fetch(
+  API_URL + "/api/products?t=" + Date.now(),
+  { cache: "no-store" }
+);
 
     const productData =
       await productResponse.json();
 
 
-    const categoryResponse =
-      await fetch(API_URL + "/api/categories");
+    const categoryResponse = await fetch(
+  API_URL + "/api/categories?t=" + Date.now(),
+  { cache: "no-store" }
+);
 
     const categoryData =
       await categoryResponse.json();
