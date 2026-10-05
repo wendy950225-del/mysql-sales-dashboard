@@ -24,7 +24,12 @@
     }
 
     h1 {
+      margin: 0 0 10px;
+    }
+
+    header p {
       margin: 0;
+      color: #666;
     }
 
     .container {
@@ -35,9 +40,19 @@
 
     .status {
       background: white;
-      padding: 15px;
+      padding: 20px;
       border-radius: 12px;
       margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      line-height: 1.8;
+    }
+
+    .status-row {
+      margin-bottom: 6px;
+    }
+
+    .version {
+      font-weight: bold;
     }
 
     .cards {
@@ -83,6 +98,11 @@
       border-radius: 8px;
       cursor: pointer;
       font-size: 16px;
+      margin-top: 10px;
+    }
+
+    button:hover {
+      opacity: 0.85;
     }
 
     @media (max-width: 800px) {
@@ -109,18 +129,28 @@
 <div class="container">
 
   <div class="status">
-    <strong>資料庫狀態：</strong>
-    <span id="status">讀取中...</span>
 
-    <br><br>
+    <div class="status-row">
+      <strong>資料庫狀態：</strong>
+      <span id="status">讀取中...</span>
+    </div>
 
-    <strong>最後更新：</strong>
-    <span id="lastUpdate">--</span>
+    <div class="status-row">
+      <strong>目前資料版本：</strong>
+      <span id="dataVersion" class="version">--</span>
+    </div>
 
-    <br><br>
+    <div class="status-row">
+      <strong>最後更新：</strong>
+      <span id="lastUpdate">--</span>
+    </div>
 
-    <button onclick="loadDashboard()">重新整理資料</button>
+    <button onclick="loadDashboard()">
+      重新整理資料
+    </button>
+
   </div>
+
 
   <div class="cards">
 
@@ -169,30 +199,76 @@
 
 <script>
 
-const API_URL = "https://mysql-sales-dashboard-w558.onrender.com";
+/*
+==================================================
+這裡一定要改成你的 Render 網址
+不要加 /api/summary
+不要在最後加 /
+==================================================
+*/
+
+const API_URL = "https://mysql-sales-dashboard-w558.onrender.com/";
+
 
 let dailyChart;
 let productChart;
 let categoryChart;
 
 
+/*
+==================================================
+共用 fetch 函式
+每次都加時間戳記，避免瀏覽器使用舊快取
+==================================================
+*/
+
+async function fetchAPI(path) {
+
+  const response = await fetch(
+    API_URL + path + "?t=" + Date.now(),
+    {
+      cache: "no-store"
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "API 錯誤：" +
+      response.status +
+      " " +
+      response.statusText
+    );
+  }
+
+  return await response.json();
+}
+
+
+/*
+==================================================
+載入整個 Dashboard
+==================================================
+*/
+
 async function loadDashboard() {
 
-  document.getElementById("status").innerText = "讀取中...";
+  document.getElementById("status").innerText =
+    "⏳ 正在讀取 MySQL...";
 
   try {
 
-    const summaryResponse = await fetch(
-  API_URL + "/api/summary?t=" + Date.now(),
-  { cache: "no-store" }
-);
+    /*
+    ----------------------------------------------
+    1. 取得 Summary
+    ----------------------------------------------
+    */
 
     const summary =
-      await summaryResponse.json();
+      await fetchAPI("/api/summary");
 
 
     document.getElementById("records").innerText =
-      summary.records;
+      Number(summary.records).toLocaleString();
 
     document.getElementById("quantity").innerText =
       Number(summary.total_quantity).toLocaleString();
@@ -201,46 +277,78 @@ async function loadDashboard() {
       Number(summary.total_returns).toLocaleString();
 
     document.getElementById("revenue").innerText =
-      "$ " + Number(summary.net_revenue).toLocaleString();
+      "NT$ " +
+      Number(summary.net_revenue).toLocaleString();
 
 
-    const dailyResponse = await fetch(
-  API_URL + "/api/daily?t=" + Date.now(),
-  { cache: "no-store" }
-);
+    /*
+    ----------------------------------------------
+    2. 取得目前資料版本
+    ----------------------------------------------
+    */
+
+    const versionData =
+      await fetchAPI("/api/version");
+
+
+    document.getElementById("dataVersion").innerText =
+      versionData.version;
+
+
+    /*
+    ----------------------------------------------
+    3. 每日銷售資料
+    ----------------------------------------------
+    */
 
     const dailyData =
-      await dailyResponse.json();
+      await fetchAPI("/api/daily");
 
 
-    const productResponse = await fetch(
-  API_URL + "/api/products?t=" + Date.now(),
-  { cache: "no-store" }
-);
+    /*
+    ----------------------------------------------
+    4. 商品銷售資料
+    ----------------------------------------------
+    */
 
     const productData =
-      await productResponse.json();
+      await fetchAPI("/api/products");
 
 
-    const categoryResponse = await fetch(
-  API_URL + "/api/categories?t=" + Date.now(),
-  { cache: "no-store" }
-);
+    /*
+    ----------------------------------------------
+    5. 分類銷售資料
+    ----------------------------------------------
+    */
 
     const categoryData =
-      await categoryResponse.json();
+      await fetchAPI("/api/categories");
 
+
+    /*
+    ----------------------------------------------
+    6. 畫圖
+    ----------------------------------------------
+    */
 
     drawDailyChart(dailyData);
+
     drawProductChart(productData);
+
     drawCategoryChart(categoryData);
 
+
+    /*
+    ----------------------------------------------
+    7. 狀態更新
+    ----------------------------------------------
+    */
 
     document.getElementById("status").innerText =
       "✅ MySQL Connected";
 
     document.getElementById("lastUpdate").innerText =
-      new Date().toLocaleString();
+      new Date().toLocaleString("zh-TW");
 
 
   } catch (error) {
@@ -250,10 +358,23 @@ async function loadDashboard() {
     document.getElementById("status").innerText =
       "❌ 資料讀取失敗";
 
-  }
+    document.getElementById("dataVersion").innerText =
+      "--";
 
+    alert(
+      "資料讀取失敗。\n\n" +
+      "請確認 Render API 是否正常。\n\n" +
+      error.message
+    );
+  }
 }
 
+
+/*
+==================================================
+每日淨銷售額折線圖
+==================================================
+*/
 
 function drawDailyChart(data) {
 
@@ -276,17 +397,67 @@ function drawDailyChart(data) {
           data.map(row => row.sale_date),
 
         datasets: [{
-          label: "Net Revenue",
+          label: "每日淨銷售額",
 
           data:
-            data.map(row => row.net_revenue)
+            data.map(row =>
+              Number(row.net_revenue)
+            ),
+
+          tension: 0.3
         }]
+      },
+
+      options: {
+
+        responsive: true,
+
+        plugins: {
+
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return (
+                  "NT$ " +
+                  Number(
+                    context.raw
+                  ).toLocaleString()
+                );
+              }
+            }
+          }
+
+        },
+
+        scales: {
+
+          y: {
+            beginAtZero: true,
+
+            ticks: {
+              callback: function(value) {
+                return (
+                  "NT$ " +
+                  Number(value).toLocaleString()
+                );
+              }
+            }
+          }
+
+        }
+
       }
 
     });
 
 }
 
+
+/*
+==================================================
+各商品淨銷售額長條圖
+==================================================
+*/
 
 function drawProductChart(data) {
 
@@ -309,17 +480,65 @@ function drawProductChart(data) {
           data.map(row => row.product_name),
 
         datasets: [{
-          label: "Net Revenue",
+          label: "商品淨銷售額",
 
           data:
-            data.map(row => row.net_revenue)
+            data.map(row =>
+              Number(row.net_revenue)
+            )
         }]
+      },
+
+      options: {
+
+        responsive: true,
+
+        plugins: {
+
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return (
+                  "NT$ " +
+                  Number(
+                    context.raw
+                  ).toLocaleString()
+                );
+              }
+            }
+          }
+
+        },
+
+        scales: {
+
+          y: {
+            beginAtZero: true,
+
+            ticks: {
+              callback: function(value) {
+                return (
+                  "NT$ " +
+                  Number(value).toLocaleString()
+                );
+              }
+            }
+          }
+
+        }
+
       }
 
     });
 
 }
 
+
+/*
+==================================================
+各分類淨銷售額圓餅圖
+==================================================
+*/
 
 function drawCategoryChart(data) {
 
@@ -344,15 +563,54 @@ function drawCategoryChart(data) {
         datasets: [{
 
           data:
-            data.map(row => row.net_revenue)
+            data.map(row =>
+              Number(row.net_revenue)
+            )
 
         }]
+      },
+
+      options: {
+
+        responsive: true,
+
+        plugins: {
+
+          tooltip: {
+
+            callbacks: {
+
+              label: function(context) {
+
+                const value =
+                  Number(context.raw);
+
+                return (
+                  context.label +
+                  ": NT$ " +
+                  value.toLocaleString()
+                );
+
+              }
+
+            }
+
+          }
+
+        }
+
       }
 
     });
 
 }
 
+
+/*
+==================================================
+網頁第一次開啟時自動載入
+==================================================
+*/
 
 loadDashboard();
 
