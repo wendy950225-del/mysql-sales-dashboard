@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>MySQL Sales Dashboard</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, "Microsoft JhengHei", sans-serif;
+      margin: 0;
+      background: #f4f6f8;
+      color: #222;
+    }
+
+    header {
+      background: #ffffff;
+      padding: 24px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    h1 {
+      margin: 0;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 30px auto;
+      padding: 0 20px;
+    }
+
+    .status {
+      background: white;
+      padding: 15px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .card h3 {
+      margin-top: 0;
+      font-size: 16px;
+      color: #666;
+    }
+
+    .card .value {
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    .chart-box {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    canvas {
+      max-height: 400px;
+    }
+
+    button {
+      padding: 10px 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    @media (max-width: 800px) {
+      .cards {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 500px) {
+      .cards {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>MySQL Sales Dashboard</h1>
+  <p>即時讀取 Aiven MySQL 資料</p>
+</header>
+
+<div class="container">
+
+  <div class="status">
+    <strong>資料庫狀態：</strong>
+    <span id="status">讀取中...</span>
+
+    <br><br>
+
+    <strong>最後更新：</strong>
+    <span id="lastUpdate">--</span>
+
+    <br><br>
+
+    <button onclick="loadDashboard()">重新整理資料</button>
+  </div>
+
+  <div class="cards">
+
+    <div class="card">
+      <h3>資料筆數</h3>
+      <div class="value" id="records">--</div>
+    </div>
+
+    <div class="card">
+      <h3>銷售數量</h3>
+      <div class="value" id="quantity">--</div>
+    </div>
+
+    <div class="card">
+      <h3>退貨數量</h3>
+      <div class="value" id="returns">--</div>
+    </div>
+
+    <div class="card">
+      <h3>淨銷售額</h3>
+      <div class="value" id="revenue">--</div>
+    </div>
+
+  </div>
+
+
+  <div class="chart-box">
+    <h2>每日淨銷售額</h2>
+    <canvas id="dailyChart"></canvas>
+  </div>
+
+
+  <div class="chart-box">
+    <h2>各商品淨銷售額</h2>
+    <canvas id="productChart"></canvas>
+  </div>
+
+
+  <div class="chart-box">
+    <h2>各分類淨銷售額</h2>
+    <canvas id="categoryChart"></canvas>
+  </div>
+
+</div>
+
+
+<script>
+
+const API_URL = "https://mysql-sales-dashboard-w558.onrender.com";
+
+let dailyChart;
+let productChart;
+let categoryChart;
+
+
+async function loadDashboard() {
+
+  document.getElementById("status").innerText = "讀取中...";
+
+  try {
+
+    const summaryResponse =
+      await fetch(API_URL + "/api/summary");
+
+    const summary =
+      await summaryResponse.json();
+
+
+    document.getElementById("records").innerText =
+      summary.records;
+
+    document.getElementById("quantity").innerText =
+      Number(summary.total_quantity).toLocaleString();
+
+    document.getElementById("returns").innerText =
+      Number(summary.total_returns).toLocaleString();
+
+    document.getElementById("revenue").innerText =
+      "$ " + Number(summary.net_revenue).toLocaleString();
+
+
+    const dailyResponse =
+      await fetch(API_URL + "/api/daily");
+
+    const dailyData =
+      await dailyResponse.json();
+
+
+    const productResponse =
+      await fetch(API_URL + "/api/products");
+
+    const productData =
+      await productResponse.json();
+
+
+    const categoryResponse =
+      await fetch(API_URL + "/api/categories");
+
+    const categoryData =
+      await categoryResponse.json();
+
+
+    drawDailyChart(dailyData);
+    drawProductChart(productData);
+    drawCategoryChart(categoryData);
+
+
+    document.getElementById("status").innerText =
+      "✅ MySQL Connected";
+
+    document.getElementById("lastUpdate").innerText =
+      new Date().toLocaleString();
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    document.getElementById("status").innerText =
+      "❌ 資料讀取失敗";
+
+  }
+
+}
+
+
+function drawDailyChart(data) {
+
+  if (dailyChart) {
+    dailyChart.destroy();
+  }
+
+  const ctx =
+    document.getElementById("dailyChart");
+
+
+  dailyChart =
+    new Chart(ctx, {
+
+      type: "line",
+
+      data: {
+
+        labels:
+          data.map(row => row.sale_date),
+
+        datasets: [{
+          label: "Net Revenue",
+
+          data:
+            data.map(row => row.net_revenue)
+        }]
+      }
+
+    });
+
+}
+
+
+function drawProductChart(data) {
+
+  if (productChart) {
+    productChart.destroy();
+  }
+
+  const ctx =
+    document.getElementById("productChart");
+
+
+  productChart =
+    new Chart(ctx, {
+
+      type: "bar",
+
+      data: {
+
+        labels:
+          data.map(row => row.product_name),
+
+        datasets: [{
+          label: "Net Revenue",
+
+          data:
+            data.map(row => row.net_revenue)
+        }]
+      }
+
+    });
+
+}
+
+
+function drawCategoryChart(data) {
+
+  if (categoryChart) {
+    categoryChart.destroy();
+  }
+
+  const ctx =
+    document.getElementById("categoryChart");
+
+
+  categoryChart =
+    new Chart(ctx, {
+
+      type: "pie",
+
+      data: {
+
+        labels:
+          data.map(row => row.category),
+
+        datasets: [{
+
+          data:
+            data.map(row => row.net_revenue)
+
+        }]
+      }
+
+    });
+
+}
+
+
+loadDashboard();
+
+</script>
+
+</body>
+</html>
