@@ -155,6 +155,59 @@ def categories():
     finally:
         connection.close()
 
+@app.route("/api/version")
+def version():
+
+    connection = get_connection()
+
+    sql = """
+    SELECT
+        COUNT(*) AS records,
+        SUM(quantity) AS total_quantity,
+        SUM(returned_quantity) AS total_returns,
+        SUM((quantity - returned_quantity) * unit_price) AS net_revenue
+    FROM sales
+    """
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            result = cursor.fetchone()
+
+        records = int(result["records"] or 0)
+        total_quantity = int(result["total_quantity"] or 0)
+        total_returns = int(result["total_returns"] or 0)
+        net_revenue = float(result["net_revenue"] or 0)
+
+        if (
+            records == 300
+            and total_quantity == 3444
+            and total_returns == 33
+            and net_revenue == 3217100
+        ):
+            data_version = "sales_original_300"
+
+        elif (
+            records == 300
+            and total_quantity == 4524
+            and total_returns == 63
+            and net_revenue == 3970100
+        ):
+            data_version = "sales_updated_300"
+
+        else:
+            data_version = "其他 / 已修改資料"
+
+        return jsonify({
+            "version": data_version,
+            "records": records,
+            "total_quantity": total_quantity,
+            "total_returns": total_returns,
+            "net_revenue": net_revenue
+        })
+
+    finally:
+        connection.close()
 
 if __name__ == "__main__":
     app.run(
